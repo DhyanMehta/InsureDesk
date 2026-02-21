@@ -7,5 +7,5 @@
 .pnp.js
 Backend
 client
-*.md
+# *.md
 *.sql
