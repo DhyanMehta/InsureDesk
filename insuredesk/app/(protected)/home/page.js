@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import { dashboardApi, clientApi, policyApi, reminderApi } from '@/lib/api'
 
 export default function HomePage() {
   const [user, setUser] = useState(null)
@@ -12,7 +11,8 @@ export default function HomePage() {
     expiringSoon: 0,
     documentsUploaded: 0,
     pendingReminders: 0,
-    totalPremium: 0
+    totalPremium: 0,
+    totalCommission: 0
   })
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
@@ -25,37 +25,76 @@ export default function HomePage() {
     try {
       // Get user
       const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      
       setUser(user)
 
-      // Get Dashboard KPIs
-      const dashboardResult = await dashboardApi.getKPIs()
+      // Calculate date 30 days from now for expiring soon
+      const thirtyDaysFromNow = new Date()
+      thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
+      const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0]
       
-      // Get additional data
-      const [clientsResult, policiesResult, remindersResult] = await Promise.all([
-        clientApi.getAll(),
-        policyApi.getAll(),
-        reminderApi.getPending()
+      const today = new Date().toISOString().split('T')[0]
+
+      // Get all data in parallel
+      const [clientsRes, policiesRes, documentsRes, remindersRes] = await Promise.all([
+        // Total clients
+        supabase
+          .from('clients')
+          .select('id', { count: 'exact', head: true })
+          .eq('agent_id', user.id)
+          .is('deleted_at', null),
+        
+        // All policies
+        supabase
+          .from('policies')
+          .select('*')
+          .eq('agent_id', user.id)
+          .is('deleted_at', null),
+        
+        // Documents count
+        supabase
+          .from('documents')
+          .select('id', { count: 'exact', head: true })
+          .eq('agent_id', user.id),
+        
+        // Pending reminders
+        supabase
+          .from('reminders')
+          .select('id', { count: 'exact', head: true })
+          .eq('agent_id', user.id)
+          .eq('status', 'pending')
       ])
 
-      // Count documents (from all policies)
-      let totalDocuments = 0
-      if (policiesResult.data) {
-        for (const policy of policiesResult.data) {
-          const { data: docs } = await supabase
-            .from('documents')
-            .select('id', { count: 'exact', head: true })
-            .eq('policy_id', policy.id)
-          totalDocuments += docs?.length || 0
-        }
-      }
+      const totalClients = clientsRes.count || 0
+      const policies = policiesRes.data || []
+      const documentsCount = documentsRes.count || 0
+      const pendingReminders = remindersRes.count || 0
+
+      // Calculate policy metrics
+      const activePolicies = policies.filter(p => p.status === 'ok').length
+      const expiringSoon = policies.filter(p => {
+        if (!p.end_date) return false
+        return p.end_date >= today && p.end_date <= thirtyDaysStr
+      }).length
+
+      // Calculate financial metrics
+      const totalPremium = policies
+        .filter(p => p.status === 'ok')
+        .reduce((sum, p) => sum + (parseFloat(p.premium) || 0), 0)
+      
+      const totalCommission = policies
+        .filter(p => p.status === 'ok')
+        .reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
 
       setKpis({
-        totalClients: dashboardResult.data?.total_clients || clientsResult.data?.length || 0,
-        activePolicies: dashboardResult.data?.active_policies || 0,
-        expiringSoon: dashboardResult.data?.expiring_soon || 0,
-        documentsUploaded: totalDocuments,
-        pendingReminders: remindersResult.data?.length || 0,
-        totalPremium: dashboardResult.data?.total_active_premium || 0
+        totalClients,
+        activePolicies,
+        expiringSoon,
+        documentsUploaded: documentsCount,
+        pendingReminders,
+        totalPremium,
+        totalCommission
       })
 
       setLoading(false)
@@ -146,12 +185,28 @@ export default function HomePage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 mb-1">Total Premium</p>
-              <p className="text-3xl font-bold text-gray-900">₹{(kpis.totalPremium / 1000).toFixed(1)}K</p>
+              <p className="text-3xl font-bold text-gray-900">₹{(kpis.totalPremium / 100000).toFixed(2)}L</p>
               <p className="text-xs text-gray-500 mt-2">Active policies</p>
             </div>
             <div className="w-12 h-12 rounded-lg bg-indigo-100 flex items-center justify-center">
               <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Total Commission */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Total Commission</p>
+              <p className="text-3xl font-bold text-green-600">₹{(kpis.totalCommission / 1000).toFixed(1)}K</p>
+              <p className="text-xs text-gray-500 mt-2">Earned commission</p>
+            </div>
+            <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
           </div>
@@ -188,6 +243,24 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+
+        {/* Policies / Client Ratio */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">Avg. Policies/Client</p>
+              <p className="text-3xl font-bold text-gray-900">
+                {kpis.totalClients > 0 ? (kpis.activePolicies / kpis.totalClients).toFixed(1) : '0'}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">Per customer</p>
+            </div>
+            <div className="w-12 h-12 rounded-lg bg-teal-100 flex items-center justify-center">
+              <svg className="w-6 h-6 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Recent Activity Section */}
@@ -197,7 +270,7 @@ export default function HomePage() {
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
           <div className="space-y-3">
             <a
-              href="/customers/add"
+              href="/clients/add"
               className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
@@ -212,7 +285,7 @@ export default function HomePage() {
             </a>
 
             <a
-              href="/customers"
+              href="/clients"
               className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-all"
             >
               <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -255,14 +328,16 @@ export default function HomePage() {
               </span>
             </div>
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-gray-600">Policies per Client</span>
-              <span className="font-semibold text-gray-900">
-                {kpis.totalClients > 0 ? (kpis.activePolicies / kpis.totalClients).toFixed(1) : '0'}
+              <span className="text-gray-600">Average Commission</span>
+              <span className="font-semibold text-green-600">
+                ₹{kpis.activePolicies > 0 ? ((kpis.totalCommission / kpis.activePolicies) / 1000).toFixed(1) : '0'}K
               </span>
             </div>
             <div className="flex items-center justify-between py-3 border-b border-gray-100">
-              <span className="text-gray-600">Renewal Rate</span>
-              <span className="font-semibold text-green-600">--</span>
+              <span className="text-gray-600">Commission Rate</span>
+              <span className="font-semibold text-green-600">
+                {kpis.totalPremium > 0 ? ((kpis.totalCommission / kpis.totalPremium) * 100).toFixed(1) : '0'}%
+              </span>
             </div>
             <div className="flex items-center justify-between py-3">
               <span className="text-gray-600">Documents per Policy</span>
@@ -271,103 +346,6 @@ export default function HomePage() {
               </span>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-              value={customerCount}
-              label="Total Customers"
-              trend={customerCount > 0 ? "up" : null}
-              trendValue={customerCount > 0 ? "+0% from last month" : null}
-              iconBg="bg-gradient-primary"
-              iconColor="text-white"
-            />
-          </div>
-
-          <div style={{ animationDelay: '0.2s' }} className="animate-fade-in-up">
-            <KPICard
-              icon={
-                <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
-                </svg>
-              }
-              value="0"
-              label="Active Policies"
-              iconBg="bg-gradient-purple"
-              iconColor="text-white"
-            />
-          </div>
-
-          <div style={{ animationDelay: '0.3s' }} className="animate-fade-in-up">
-            <KPICard
-              icon={
-                <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/>
-                </svg>
-              }
-              value="₹0"
-              label="Total Premium"
-              iconBg="bg-gradient-success"
-              iconColor="text-white"
-            />
-          </div>
-        </div>
-
-        {/* Action Cards */}
-        <div style={{ animationDelay: '0.4s' }} className="animate-fade-in-up mb-8">
-          <SectionHeader
-            title="Quick Actions"
-            subtitle="Common tasks and shortcuts"
-            icon={
-              <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M13 10V3L4 14h7v7l9-11h-7z"/>
-              </svg>
-            }
-          />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <ActionCard
-              href="/customers/add"
-              icon={
-                <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                </svg>
-              }
-              title="Add Customer"
-              description="Create new insurance policy"
-              gradient="from-primary-start to-primary-end"
-              delay="0.1s"
-            />
-            <ActionCard
-              href="/customers"
-              icon={
-                <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-                </svg>
-              }
-              title="View Customers"
-              description="Browse and search policies"
-              gradient="from-purple-accent to-purple-300"
-              delay="0.2s"
-            />
-            <ActionCard
-              href="/customers"
-              icon={
-                <svg width="28" height="28" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-                </svg>
-              }
-              title="Reports"
-              description="Analytics and insights"
-              gradient="from-sky-accent to-sky-300"
-              delay="0.3s"
-            />
-          </div>
-        </div>
-
-        {/* Quick Action List */}
-        <div style={{ animationDelay: '0.5s' }} className="animate-fade-in-up">
-          <QuickActionList actions={quickActions} />
         </div>
       </div>
     </div>

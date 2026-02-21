@@ -11,28 +11,28 @@
   /* Primary Colors */
   --primary-start: #5B6CFF;
   --primary-end: #7F8CFF;
-  
+
   /* Accent Colors */
   --purple-accent: #A78BFA;
   --sky-blue: #60A5FA;
   --soft-green: #34D399;
   --soft-red: #F87171;
   --warning: #FBBF24;
-  
+
   /* Background Colors */
   --bg-main: #EEF2FF;
   --bg-secondary: #E0E7FF;
   --bg-card: #FFFFFF;
   --bg-sidebar: rgba(255, 255, 255, 0.6);
-  
+
   /* Text Colors */
   --text-primary: #111827;
   --text-secondary: #6B7280;
   --text-muted: #9CA3AF;
-  
+
   /* Border */
   --border-color: #E5E7EB;
-  
+
   /* Shadows */
   --shadow-soft: 0 10px 25px rgba(0, 0, 0, 0.05);
   --shadow-soft-lg: 0 20px 40px rgba(0, 0, 0, 0.08);
@@ -71,100 +71,100 @@ code {
     @apply bg-white/60 backdrop-blur-glass rounded-card-lg shadow-glass border border-border/50;
     transition: all 0.3s ease;
   }
-  
+
   .glass-card:hover {
     @apply shadow-card-hover transform -translate-y-1;
   }
-  
+
   /* Premium Card */
   .premium-card {
     @apply bg-white rounded-card-lg shadow-soft p-6 border border-border/30;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  
+
   .premium-card:hover {
     @apply shadow-card-hover transform -translate-y-1;
   }
-  
+
   /* Gradient Card */
   .gradient-card {
     @apply rounded-card-lg shadow-soft p-6;
     background: linear-gradient(135deg, #5B6CFF 0%, #7F8CFF 100%);
     transition: all 0.3s ease;
   }
-  
+
   .gradient-card:hover {
     @apply shadow-soft-lg transform scale-105;
   }
-  
+
   /* Pill Button */
   .btn-pill {
     @apply rounded-button px-6 py-3 font-medium transition-all duration-300;
   }
-  
+
   .btn-primary-gradient {
     @apply btn-pill text-white;
     background: linear-gradient(135deg, #5B6CFF 0%, #7F8CFF 100%);
     box-shadow: 0 4px 15px rgba(91, 108, 255, 0.3);
   }
-  
+
   .btn-primary-gradient:hover {
     @apply transform -translate-y-0.5;
     box-shadow: 0 6px 20px rgba(91, 108, 255, 0.4);
   }
-  
+
   .btn-outline-premium {
     @apply btn-pill border-2 border-primary bg-transparent text-primary;
   }
-  
+
   .btn-outline-premium:hover {
     @apply bg-primary text-white transform -translate-y-0.5;
   }
-  
+
   /* KPI Card */
   .kpi-card {
     @apply premium-card flex flex-col;
   }
-  
+
   .kpi-value {
     @apply text-4xl font-bold text-text-primary mb-1;
   }
-  
+
   .kpi-label {
     @apply text-sm text-text-secondary font-medium;
   }
-  
+
   .kpi-icon {
     @apply w-12 h-12 rounded-xl flex items-center justify-center mb-4;
   }
-  
+
   /* Sidebar styles */
   .sidebar-nav-item {
     @apply flex items-center gap-3 px-4 py-3 rounded-xl text-text-secondary font-medium transition-all duration-200;
   }
-  
+
   .sidebar-nav-item:hover {
     @apply bg-primary-100 text-primary;
   }
-  
+
   .sidebar-nav-item.active {
     @apply bg-gradient-primary text-white shadow-soft;
   }
-  
+
   /* Smooth scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-track {
     @apply bg-gray-100 rounded-full;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb {
     @apply bg-primary/30 rounded-full;
   }
-  
+
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
     @apply bg-primary/50;
   }
@@ -283,7 +283,7 @@ code {
   .footer .col-md-4 {
     margin-bottom: 1rem;
   }
-  
+
   .footer .col-md-4:last-child {
     margin-bottom: 0;
   }
@@ -407,6 +407,7 @@ a:hover {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);

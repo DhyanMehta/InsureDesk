@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar'
 
 export default async function ProtectedLayout({ children }) {
   const supabase = await createClient()
-  
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -18,12 +18,12 @@ export default async function ProtectedLayout({ children }) {
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <Sidebar />
-      
+
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
         {/* Top Navbar */}
         <DashboardNavbar user={user} />
-        
+
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto">
           {children}
