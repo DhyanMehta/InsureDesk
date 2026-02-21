@@ -29,9 +29,9 @@ export default function RemindersPage() {
           *,
           policies (
             policy_number,
-            provider,
+            providers (name),
             clients (
-              name
+              full_name
             )
           )
         `)
@@ -56,7 +56,7 @@ export default function RemindersPage() {
         .eq('id', id)
 
       if (error) throw error
-      
+
       // Refresh the list
       fetchReminders()
     } catch (err) {
@@ -121,11 +121,10 @@ export default function RemindersPage() {
           {reminders.map((reminder) => (
             <div
               key={reminder.id}
-              className={`bg-white rounded-xl shadow-sm border-l-4 p-6 hover:shadow-md transition-shadow ${
-                isPastDue(reminder.remind_on) && reminder.status === 'pending'
+              className={`bg-white rounded-xl shadow-sm border-l-4 p-6 hover:shadow-md transition-shadow ${isPastDue(reminder.remind_on) && reminder.status === 'pending'
                   ? 'border-red-500'
                   : 'border-indigo-500'
-              }`}
+                }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -141,7 +140,7 @@ export default function RemindersPage() {
                       <span className="font-medium">Policy:</span> {reminder.policies?.policy_number || 'N/A'}
                     </p>
                     <p>
-                      <span className="font-medium">Client:</span> {reminder.policies?.clients?.name || 'N/A'}
+                      <span className="font-medium">Client:</span> {reminder.policies?.clients?.full_name || 'N/A'}
                     </p>
                     <p>
                       <span className="font-medium">Date:</span> {new Date(reminder.remind_on).toLocaleDateString('en-US', {

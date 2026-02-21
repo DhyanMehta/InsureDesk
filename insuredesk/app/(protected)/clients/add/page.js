@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 export default function AddClientPage() {
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',

@@ -7,13 +7,13 @@ import { createClient } from '@/utils/supabase/client'
 export default function AddPolicyPage() {
   const router = useRouter()
   const supabase = createClient()
-  
+
   const [clients, setClients] = useState([])
   const [insuranceCompanies, setInsuranceCompanies] = useState([])
   const [providers, setProviders] = useState([])
   const [subCategories, setSubCategories] = useState([])
   const [selectedSubCategory, setSelectedSubCategory] = useState(null)
-  
+
   const [formData, setFormData] = useState({
     client_id: '',
     policy_number: '',
@@ -28,7 +28,7 @@ export default function AddPolicyPage() {
     end_date: '',
     status: 'ok'
   })
-  
+
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
@@ -90,10 +90,10 @@ export default function AddPolicyPage() {
     if (name === 'subcategory_id') {
       const selected = subCategories.find(cat => cat.id === value)
       setSelectedSubCategory(selected)
-      
+
       // Determine if vehicle fields are required (2/4 Wheeler)
       const requiresVehicle = selected && (selected.name.includes('Wheeler') || selected.name.includes('wheeler'))
-      
+
       // Clear vehicle fields if not required
       if (!requiresVehicle) {
         setFormData(prev => ({
@@ -118,16 +118,16 @@ export default function AddPolicyPage() {
       }
 
       // Validate required fields
-      if (!formData.client_id || !formData.policy_number || !formData.insurance_company_id || 
-          !formData.provider_id || !formData.subcategory_id || !formData.premium || 
-          !formData.start_date || !formData.end_date) {
+      if (!formData.client_id || !formData.policy_number || !formData.insurance_company_id ||
+        !formData.provider_id || !formData.subcategory_id || !formData.premium ||
+        !formData.start_date || !formData.end_date) {
         throw new Error('Please fill in all required fields')
       }
 
       // Check if vehicle fields are required
-      const requiresVehicle = selectedSubCategory && 
+      const requiresVehicle = selectedSubCategory &&
         (selectedSubCategory.name.includes('Wheeler') || selectedSubCategory.name.includes('wheeler'))
-      
+
       if (requiresVehicle && (!formData.registration_no || !formData.vehicle_name)) {
         throw new Error('Vehicle details are required for this sub-category')
       }

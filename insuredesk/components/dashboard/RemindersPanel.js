@@ -2,15 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { Reminder } from '@/types/database'
 import { reminderApi } from '@/lib/api'
 
-interface RemindersPanelProps {
-    maxItems?: number
-}
-
-export default function RemindersPanel({ maxItems = 5 }: RemindersPanelProps) {
-    const [reminders, setReminders] = useState < any[] > ([])
+export default function RemindersPanel({ maxItems = 5 }) {
+    const [reminders, setReminders] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -26,12 +21,12 @@ export default function RemindersPanel({ maxItems = 5 }: RemindersPanelProps) {
         setLoading(false)
     }
 
-    const handleMarkAsSent = async (id: string) => {
+    const handleMarkAsSent = async (id) => {
         await reminderApi.markAsSent(id)
         loadReminders()
     }
 
-    const getReminderIcon = (type: string) => {
+    const getReminderIcon = (type) => {
         switch (type) {
             case 'policy_expiry':
                 return (

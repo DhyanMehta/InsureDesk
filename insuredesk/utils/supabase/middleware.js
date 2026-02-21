@@ -39,7 +39,7 @@ export async function updateSession(request) {
 
   // Protected routes
   const protectedPaths = ['/home', '/clients', '/policies', '/documents', '/reminders', '/settings', '/profile', '/dashboard']
-  const isProtectedRoute = protectedPaths.some(path => 
+  const isProtectedRoute = protectedPaths.some(path =>
     request.nextUrl.pathname.startsWith(path)
   )
 
@@ -52,7 +52,7 @@ export async function updateSession(request) {
 
   // Redirect to home if accessing auth pages while logged in
   const authPaths = ['/login', '/signup']
-  const isAuthRoute = authPaths.some(path => 
+  const isAuthRoute = authPaths.some(path =>
     request.nextUrl.pathname === path
   )
 

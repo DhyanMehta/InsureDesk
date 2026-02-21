@@ -26,14 +26,14 @@ export default function HomePage() {
       // Get user
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      
+
       setUser(user)
 
       // Calculate date 30 days from now for expiring soon
       const thirtyDaysFromNow = new Date()
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
       const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0]
-      
+
       const today = new Date().toISOString().split('T')[0]
 
       // Get all data in parallel
@@ -44,20 +44,20 @@ export default function HomePage() {
           .select('id', { count: 'exact', head: true })
           .eq('agent_id', user.id)
           .is('deleted_at', null),
-        
+
         // All policies
         supabase
           .from('policies')
           .select('*')
           .eq('agent_id', user.id)
           .is('deleted_at', null),
-        
+
         // Documents count
         supabase
           .from('documents')
           .select('id', { count: 'exact', head: true })
           .eq('agent_id', user.id),
-        
+
         // Pending reminders
         supabase
           .from('reminders')
@@ -82,7 +82,7 @@ export default function HomePage() {
       const totalPremium = policies
         .filter(p => p.status === 'ok')
         .reduce((sum, p) => sum + (parseFloat(p.premium) || 0), 0)
-      
+
       const totalCommission = policies
         .filter(p => p.status === 'ok')
         .reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)

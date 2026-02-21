@@ -29,9 +29,9 @@ export default function DocumentsPage() {
           *,
           policies (
             policy_number,
-            provider,
+            providers (name),
             clients (
-              name
+              full_name
             )
           )
         `)
@@ -151,25 +151,24 @@ export default function DocumentsPage() {
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   {getFileIcon(doc.file_type)}
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    doc.is_verified 
-                      ? 'bg-green-100 text-green-800' 
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${doc.is_verified
+                      ? 'bg-green-100 text-green-800'
                       : 'bg-yellow-100 text-yellow-800'
-                  }`}>
+                    }`}>
                     {doc.is_verified ? 'Verified' : 'Pending'}
                   </span>
                 </div>
-                
+
                 <h3 className="font-semibold text-gray-900 mb-3 truncate" title={doc.file_name}>
                   {doc.file_name}
                 </h3>
-                
+
                 <div className="space-y-2 mb-4 pb-4 border-b border-gray-100">
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Policy:</span> {doc.policies?.policy_number || 'N/A'}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Client:</span> {doc.policies?.clients?.name || 'N/A'}
+                    <span className="font-medium">Client:</span> {doc.policies?.clients?.full_name || 'N/A'}
                   </p>
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Size:</span> {formatFileSize(doc.file_size)}

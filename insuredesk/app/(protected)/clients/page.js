@@ -70,7 +70,7 @@ export default function ClientsPage() {
         .eq('id', id)
 
       if (error) throw error
-      
+
       fetchClients()
     } catch (err) {
       console.error('Error deleting client:', err)

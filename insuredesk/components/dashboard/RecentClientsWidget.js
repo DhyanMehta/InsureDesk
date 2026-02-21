@@ -2,15 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { Client } from '@/types/database'
 import { clientApi } from '@/lib/api'
 
-interface RecentClientsWidgetProps {
-    maxItems?: number
-}
-
-export default function RecentClientsWidget({ maxItems = 5 }: RecentClientsWidgetProps) {
-    const [clients, setClients] = useState < Client[] > ([])
+export default function RecentClientsWidget({ maxItems = 5 }) {
+    const [clients, setClients] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -26,7 +21,7 @@ export default function RecentClientsWidget({ maxItems = 5 }: RecentClientsWidge
         setLoading(false)
     }
 
-    const getInitials = (name: string) => {
+    const getInitials = (name) => {
         return name
             .split(' ')
             .map(n => n[0])
@@ -35,7 +30,7 @@ export default function RecentClientsWidget({ maxItems = 5 }: RecentClientsWidge
             .slice(0, 2)
     }
 
-    const getAvatarColor = (name: string) => {
+    const getAvatarColor = (name) => {
         const colors = [
             'bg-gradient-to-br from-blue-400 to-blue-600',
             'bg-gradient-to-br from-purple-400 to-purple-600',
@@ -106,8 +101,8 @@ export default function RecentClientsWidget({ maxItems = 5 }: RecentClientsWidge
                             </div>
                             <div className="text-right">
                                 <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${client.status === 'active'
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-gray-100 text-gray-700'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-700'
                                     }`}>
                                     {client.status}
                                 </span>

@@ -2,19 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { Policy, Client } from '@/types/database'
 import { policyApi } from '@/lib/api'
-
-interface ExpiringPoliciesWidgetProps {
-    days?: number
-    maxItems?: number
-}
 
 export default function ExpiringPoliciesWidget({
     days = 30,
     maxItems = 5
-}: ExpiringPoliciesWidgetProps) {
-    const [policies, setPolicies] = useState < (Policy & { client?: Client })[] > ([])
+}) {
+    const [policies, setPolicies] = useState([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
@@ -30,7 +24,7 @@ export default function ExpiringPoliciesWidget({
         setLoading(false)
     }
 
-    const getDaysUntilExpiry = (endDate: string) => {
+    const getDaysUntilExpiry = (endDate) => {
         const today = new Date()
         const expiry = new Date(endDate)
         const diffTime = expiry.getTime() - today.getTime()
@@ -38,7 +32,7 @@ export default function ExpiringPoliciesWidget({
         return diffDays
     }
 
-    const getUrgencyColor = (days: number) => {
+    const getUrgencyColor = (days) => {
         if (days <= 7) return 'text-danger-soft'
         if (days <= 15) return 'text-warning-soft'
         return 'text-primary'

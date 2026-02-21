@@ -171,11 +171,10 @@ export default function ClientDetailPage() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab
+              className={`pb-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === tab
                   ? 'border-indigo-600 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
@@ -223,13 +222,12 @@ export default function ClientDetailPage() {
                       <p><span className="font-medium">Period:</span> {new Date(policy.start_date).toLocaleDateString()} - {new Date(policy.end_date).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    policy.status === 'ok' ? 'bg-green-100 text-green-800' :
-                    policy.status === 'due' ? 'bg-orange-100 text-orange-800' :
-                    policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    policy.status === 'expired' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${policy.status === 'ok' ? 'bg-green-100 text-green-800' :
+                      policy.status === 'due' ? 'bg-orange-100 text-orange-800' :
+                        policy.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          policy.status === 'expired' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                    }`}>
                     {policy.status}
                   </span>
                 </div>
@@ -283,11 +281,10 @@ export default function ClientDetailPage() {
                       Date: {new Date(reminder.remind_on).toLocaleDateString()}
                     </p>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                    reminder.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    reminder.status === 'dismissed' ? 'bg-gray-100 text-gray-800' :
-                    'bg-yellow-100 text-yellow-800'
-                  }`}>
+                  <span className={`px-3 py-1 rounded-full text-sm font-medium ${reminder.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      reminder.status === 'dismissed' ? 'bg-gray-100 text-gray-800' :
+                        'bg-yellow-100 text-yellow-800'
+                    }`}>
                     {reminder.status}
                   </span>
                 </div>
