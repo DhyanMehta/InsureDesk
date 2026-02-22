@@ -1,0 +1,30 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "s-maxage=60, stale-while-revalidate"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/keep-alive",
+      "schedule": "0 2 * * 0"
+    }
+  ]
+}

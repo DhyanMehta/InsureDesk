@@ -1,0 +1,50 @@
+name: Supabase Keep-Alive
+
+on:
+  # Run every Sunday at 2:00 AM UTC (weekly)
+  schedule:
+    - cron: '0 2 * * 0'
+  
+  # Allow manual triggering from GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      
+      - name: Install dependencies
+        run: |
+          cd insuredesk
+          npm ci --only=production
+      
+      - name: Run Keep-Alive Script
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          DEPLOYED_URL: ${{ secrets.DEPLOYED_URL }}
+        run: |
+          cd insuredesk
+          node scripts/keep-alive.js
+      
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: keep-alive-logs
+          path: insuredesk/keep-alive.log
+          retention-days: 30
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::warning::Keep-Alive failed! Check the logs for details."
+          echo "Your Supabase project might be at risk of pausing."

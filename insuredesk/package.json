@@ -6,7 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "build:production": "NODE_ENV=production next build",
+    "analyze": "ANALYZE=true next build",
+    "test:build": "next build && next start",
+    "clean": "rm -rf .next node_modules",
+    "health": "curl http://localhost:3000/api/health",
+    "check:production": "node scripts/check-production.js",
+    "prepare:deploy": "npm run check:production && npm run build",
+    "keep-alive": "node scripts/keep-alive.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

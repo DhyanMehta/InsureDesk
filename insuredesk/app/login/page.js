@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap'
+import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from 'react-bootstrap'
 import { createClient } from '@/utils/supabase/client'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -148,5 +148,23 @@ export default function LoginPage() {
         </Row>
       </Container>
     </div>
+  )
+}
+
+// Loading fallback for Suspense
+function LoginLoading() {
+  return (
+    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
+      <Spinner animation="border" variant="primary" />
+    </div>
+  )
+}
+
+// Export with Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginLoading />}>
+      <LoginForm />
+    </Suspense>
   )
 }
