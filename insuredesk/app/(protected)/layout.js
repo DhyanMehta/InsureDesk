@@ -14,6 +14,35 @@ export default async function ProtectedLayout({ children }) {
     redirect('/login')
   }
 
+  // Ensure profile exists for the user (required for foreign key constraints)
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (!existingProfile) {
+    // Create profile if it doesn't exist
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .upsert([
+        {
+          id: user.id,
+          full_name: user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Agent',
+          phone: user.user_metadata?.phone || null,
+          company_name: user.user_metadata?.company_name || null
+        }
+      ], {
+        onConflict: 'id',
+        ignoreDuplicates: false
+      })
+
+    // Ignore RLS errors - profile might already exist from another session
+    if (profileError && !profileError.message.includes('row-level security')) {
+      console.error('Profile creation warning:', profileError.message)
+    }
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}

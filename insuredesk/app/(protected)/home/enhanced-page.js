@@ -9,7 +9,7 @@ import RecentClientsWidget from '@/components/dashboard/RecentClientsWidget'
 import RemindersPanel from '@/components/dashboard/RemindersPanel'
 import SectionHeader from '@/components/dashboard/SectionHeader'
 import { dashboardApi } from '@/lib/api'
-import type { DashboardKPIs } from '@/types/database'
+// import type { DashboardKPIs } from '@/types/database'
 
 export default function HomePage() {
     const [user, setUser] = useState(null)

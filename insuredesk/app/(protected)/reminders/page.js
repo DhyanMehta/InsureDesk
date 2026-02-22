@@ -1,68 +1,69 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSupabaseQuery, useSupabaseMutation } from '@/hooks/useSupabaseQuery'
 
 export default function RemindersPage() {
   const router = useRouter()
-  const [reminders, setReminders] = useState([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const supabase = createClient()
 
-  useEffect(() => {
-    fetchReminders()
-  }, [])
-
-  const fetchReminders = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
+  // Optimized reminders fetching with caching
+  const { data: remindersData, loading, refetch, supabase } = useSupabaseQuery(
+    'reminders-list',
+    async () => {
       const { data, error } = await supabase
         .from('reminders')
         .select(`
-          *,
+          id,
+          reminder_type,
+          remind_on,
+          status,
+          client_id,
+          policy_id,
+          clients (
+            full_name
+          ),
           policies (
             policy_number,
-            providers (name),
-            clients (
-              full_name
-            )
+            providers (name)
           )
         `)
-        .eq('agent_id', user.id)
+        .eq('agent_id', (await supabase.auth.getUser()).data.user?.id)
         .order('remind_on', { ascending: true })
 
       if (error) throw error
-      setReminders(data || [])
-    } catch (err) {
-      console.error('Error fetching reminders:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      return data || []
+    },
+    { staleTime: 30000 } // Cache for 30 seconds (more frequent updates for reminders)
+  )
 
-  const updateReminderStatus = async (id, status) => {
-    try {
+  const reminders = remindersData || []
+
+  // Optimized mutation for reminder status updates
+  const updateStatusMutation = useSupabaseMutation(
+    async ({ id, status }) => {
       const { error } = await supabase
         .from('reminders')
         .update({ status })
         .eq('id', id)
 
       if (error) throw error
-
-      // Refresh the list
-      fetchReminders()
-    } catch (err) {
-      console.error('Error updating reminder:', err)
-      setError(err.message)
+    },
+    {
+      onSuccess: () => {
+        refetch() // Refresh reminders list
+      },
+      invalidateKeys: ['reminders-list', 'dashboard-kpis']
     }
+  )
+
+  const updateReminderStatus = (id, status) => {
+    updateStatusMutation.mutate({ id, status })
+      .catch(err => {
+        console.error('Error updating reminder:', err)
+        setError(err.message)
+      })
   }
 
   const getStatusColor = (status) => {
@@ -122,14 +123,14 @@ export default function RemindersPage() {
             <div
               key={reminder.id}
               className={`bg-white rounded-xl shadow-sm border-l-4 p-6 hover:shadow-md transition-shadow ${isPastDue(reminder.remind_on) && reminder.status === 'pending'
-                  ? 'border-red-500'
-                  : 'border-indigo-500'
+                ? 'border-red-500'
+                : 'border-indigo-500'
                 }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900">{reminder.message}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">{reminder.reminder_type || 'Reminder'}</h3>
                     <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(reminder.status)}`}>
                       {reminder.status}
                     </span>
@@ -140,7 +141,7 @@ export default function RemindersPage() {
                       <span className="font-medium">Policy:</span> {reminder.policies?.policy_number || 'N/A'}
                     </p>
                     <p>
-                      <span className="font-medium">Client:</span> {reminder.policies?.clients?.full_name || 'N/A'}
+                      <span className="font-medium">Client:</span> {reminder.clients?.full_name || 'N/A'}
                     </p>
                     <p>
                       <span className="font-medium">Date:</span> {new Date(reminder.remind_on).toLocaleDateString('en-US', {

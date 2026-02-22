@@ -1,40 +1,32 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { useState } from 'react'
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
+import { batchQueries } from '@/utils/performance'
 
 export default function SettingsPage() {
-    const supabase = createClient()
     const [activeTab, setActiveTab] = useState('companies')
-    const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
 
-    const [insuranceCompanies, setInsuranceCompanies] = useState([])
-    const [providers, setProviders] = useState([])
-    const [subcategories, setSubcategories] = useState([])
-
-    useEffect(() => {
-        fetchMasterData()
-    }, [])
-
-    const fetchMasterData = async () => {
-        setLoading(true)
-        try {
+    // Optimized master data fetching with aggressive caching (master data rarely changes)
+    const { data: masterData, loading, supabase } = useSupabaseQuery(
+        'master-data-all',
+        async () => {
             // Fetch all master data in parallel
             const [companiesRes, providersRes, subcategoriesRes] = await Promise.all([
                 supabase
                     .from('insurance_companies')
-                    .select('*')
+                    .select('id, name')
                     .order('name', { ascending: true }),
 
                 supabase
                     .from('providers')
-                    .select('*')
+                    .select('id, name')
                     .order('name', { ascending: true }),
 
                 supabase
                     .from('policy_subcategories')
-                    .select('*')
+                    .select('id, name')
                     .order('name', { ascending: true })
             ])
 
@@ -42,16 +34,18 @@ export default function SettingsPage() {
             if (providersRes.error) throw providersRes.error
             if (subcategoriesRes.error) throw subcategoriesRes.error
 
-            setInsuranceCompanies(companiesRes.data || [])
-            setProviders(providersRes.data || [])
-            setSubcategories(subcategoriesRes.data || [])
-        } catch (err) {
-            console.error('Error fetching master data:', err)
-            setError(err.message)
-        } finally {
-            setLoading(false)
-        }
-    }
+            return {
+                insuranceCompanies: companiesRes.data || [],
+                providers: providersRes.data || [],
+                subcategories: subcategoriesRes.data || []
+            }
+        },
+        { staleTime: 300000 } // Cache for 5 minutes - master data rarely changes
+    )
+
+    const insuranceCompanies = masterData?.insuranceCompanies || []
+    const providers = masterData?.providers || []
+    const subcategories = masterData?.subcategories || []
 
     const tabs = [
         { id: 'companies', label: 'Insurance Companies', count: insuranceCompanies.length },
@@ -109,8 +103,8 @@ export default function SettingsPage() {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                                        ? 'border-indigo-600 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                    ? 'border-indigo-600 text-indigo-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >
                                 {tab.label}

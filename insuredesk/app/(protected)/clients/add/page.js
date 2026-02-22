@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
+import { useSupabaseMutation } from '@/hooks/useSupabaseQuery'
 
 export default function AddClientPage() {
   const router = useRouter()
@@ -13,12 +14,59 @@ export default function AddClientPage() {
     email: '',
     phone: '',
     age: '',
+    date_of_birth: '',
     address: '',
   })
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [loading, setLoading] = useState(false)
+
+  // Optimized mutation with cache invalidation
+  const addClientMutation = useSupabaseMutation(
+    async (clientData) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([
+          {
+            agent_id: user.id,
+            full_name: clientData.name,
+            email: clientData.email || null,
+            phone: clientData.phone || null,
+            age: clientData.age ? parseInt(clientData.age) : null,
+            date_of_birth: clientData.date_of_birth || null,
+            address: clientData.address || null,
+          }
+        ])
+        .select()
+
+      if (error) throw error
+      return data
+    },
+    {
+      onSuccess: () => {
+        setSuccess('Client added successfully!')
+
+        // Reset form
+        setFormData({
+          name: '',
+          email: '',
+          phone: '',
+          age: '',
+          date_of_birth: '',
+          address: '',
+        })
+
+        // Redirect after 1.5 seconds
+        setTimeout(() => {
+          router.push('/clients')
+        }, 1500)
+      },
+      invalidateKeys: ['clients-list', 'dashboard-kpis', 'policy-form-options']
+    }
+  )
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -36,51 +84,11 @@ export default function AddClientPage() {
       return
     }
 
-    setLoading(true)
-
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('clients')
-        .insert([
-          {
-            agent_id: user.id,
-            name: formData.name,
-            email: formData.email || null,
-            phone: formData.phone,
-            age: formData.age ? parseInt(formData.age) : null,
-            address: formData.address || null,
-          }
-        ])
-        .select()
-
-      if (error) throw error
-
-      setSuccess('Client added successfully!')
-
-      // Reset form
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        age: '',
-        address: '',
-      })
-
-      // Redirect after 1.5 seconds
-      setTimeout(() => {
-        router.push('/clients')
-      }, 1500)
+      await addClientMutation.mutate(formData)
     } catch (err) {
       console.error('Error adding client:', err)
       setError(err.message || 'Failed to add client')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -166,6 +174,21 @@ export default function AddClientPage() {
             />
           </div>
 
+          {/* Date of Birth Field */}
+          <div>
+            <label htmlFor="date_of_birth" className="block text-sm font-medium text-gray-700 mb-2">
+              Date of Birth
+            </label>
+            <input
+              type="date"
+              id="date_of_birth"
+              name="date_of_birth"
+              value={formData.date_of_birth}
+              onChange={handleChange}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            />
+          </div>
+
           {/* Age Field */}
           <div>
             <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-2">
@@ -178,7 +201,7 @@ export default function AddClientPage() {
               value={formData.age}
               onChange={handleChange}
               min="0"
-              max="150"
+              max="120"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
               placeholder="Enter age"
             />
@@ -204,15 +227,15 @@ export default function AddClientPage() {
           <div className="flex gap-3 pt-4">
             <button
               type="submit"
-              disabled={loading}
+              disabled={addClientMutation.loading}
               className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Adding Client...' : 'Add Client'}
+              {addClientMutation.loading ? 'Adding Client...' : 'Add Client'}
             </button>
             <button
               type="button"
               onClick={() => router.back()}
-              disabled={loading}
+              disabled={addClientMutation.loading}
               className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel

@@ -1,19 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSupabaseQuery, useSupabaseMutation } from '@/hooks/useSupabaseQuery'
 
 export default function AddPolicyPage() {
   const router = useRouter()
-  const supabase = createClient()
 
-  const [clients, setClients] = useState([])
-  const [insuranceCompanies, setInsuranceCompanies] = useState([])
-  const [providers, setProviders] = useState([])
-  const [subCategories, setSubCategories] = useState([])
   const [selectedSubCategory, setSelectedSubCategory] = useState(null)
-
+  const [clientSearch, setClientSearch] = useState('')
+  const [showClientDropdown, setShowClientDropdown] = useState(false)
   const [formData, setFormData] = useState({
     client_id: '',
     policy_number: '',
@@ -31,18 +27,15 @@ export default function AddPolicyPage() {
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    fetchData()
-  }, [])
-
-  const fetchData = async () => {
-    try {
+  // Optimized form data loading with caching
+  const { data: formOptions, loading: optionsLoading, supabase } = useSupabaseQuery(
+    'policy-form-options',
+    async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) return null
 
-      // Fetch all data in parallel
+      // Fetch all data in parallel with only needed fields
       const [clientsRes, companiesRes, providersRes, categoriesRes] = await Promise.all([
         supabase
           .from('clients')
@@ -52,15 +45,15 @@ export default function AddPolicyPage() {
           .order('full_name'),
         supabase
           .from('insurance_companies')
-          .select('*')
+          .select('id, name')
           .order('name'),
         supabase
           .from('providers')
-          .select('*')
+          .select('id, name')
           .order('name'),
         supabase
           .from('policy_subcategories')
-          .select('*')
+          .select('id, name')
           .order('name')
       ])
 
@@ -69,15 +62,55 @@ export default function AddPolicyPage() {
       if (providersRes.error) throw providersRes.error
       if (categoriesRes.error) throw categoriesRes.error
 
-      setClients(clientsRes.data || [])
-      setInsuranceCompanies(companiesRes.data || [])
-      setProviders(providersRes.data || [])
-      setSubCategories(categoriesRes.data || [])
-    } catch (err) {
-      console.error('Error fetching data:', err)
-      setError('Failed to load form data: ' + err.message)
+      return {
+        clients: clientsRes.data || [],
+        insuranceCompanies: companiesRes.data || [],
+        providers: providersRes.data || [],
+        subCategories: categoriesRes.data || []
+      }
+    },
+    { staleTime: 120000 } // Cache for 2 minutes
+  )
+
+  const clients = formOptions?.clients || []
+  const insuranceCompanies = formOptions?.insuranceCompanies || []
+  const providers = formOptions?.providers || []
+  const subCategories = formOptions?.subCategories || []
+
+  // Filtered clients based on search
+  const filteredClients = useMemo(() => {
+    if (!clientSearch) return clients
+    const query = clientSearch.toLowerCase()
+    return clients.filter(client =>
+      client.full_name?.toLowerCase().includes(query) ||
+      client.email?.toLowerCase().includes(query)
+    )
+  }, [clients, clientSearch])
+
+  // Get selected client name for display
+  const selectedClient = clients.find(c => c.id === formData.client_id)
+
+  // Mutation for adding policy with cache invalidation
+  const addPolicyMutation = useSupabaseMutation(
+    async (policyData) => {
+      const { data, error } = await supabase
+        .from('policies')
+        .insert([policyData])
+        .select()
+
+      if (error) throw error
+      return data
+    },
+    {
+      onSuccess: () => {
+        setSuccess('Policy added successfully!')
+        setTimeout(() => {
+          router.push('/policies')
+        }, 1500)
+      },
+      invalidateKeys: ['policies-list', 'dashboard-kpis', 'policy-form-options']
     }
-  }
+  )
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -109,7 +142,6 @@ export default function AddPolicyPage() {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setLoading(true)
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -152,21 +184,10 @@ export default function AddPolicyPage() {
         policyData.vehicle_name = formData.vehicle_name
       }
 
-      const { data, error } = await supabase
-        .from('policies')
-        .insert([policyData])
-
-      if (error) throw error
-
-      setSuccess('Policy added successfully!')
-      setTimeout(() => {
-        router.push('/policies')
-      }, 1500)
+      await addPolicyMutation.mutate(policyData)
     } catch (err) {
       console.error('Error adding policy:', err)
       setError(err.message)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -193,25 +214,69 @@ export default function AddPolicyPage() {
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Client Selection */}
-            <div>
+            {/* Client Selection with Autocomplete */}
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Client <span className="text-red-500">*</span>
               </label>
-              <select
-                name="client_id"
-                value={formData.client_id}
-                onChange={handleChange}
-                required
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-              >
-                <option value="">Select a client</option>
-                {clients.map(client => (
-                  <option key={client.id} value={client.id}>
-                    {client.full_name} - {client.email}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={selectedClient ? `${selectedClient.full_name} - ${selectedClient.email}` : clientSearch}
+                  onChange={(e) => {
+                    setClientSearch(e.target.value)
+                    setShowClientDropdown(true)
+                    if (selectedClient) {
+                      setFormData(prev => ({ ...prev, client_id: '' }))
+                    }
+                  }}
+                  onFocus={() => setShowClientDropdown(true)}
+                  placeholder="Search client by name or email..."
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                />
+                {showClientDropdown && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                    {optionsLoading ? (
+                      <div className="px-4 py-3 text-sm text-gray-500">Loading clients...</div>
+                    ) : filteredClients.length === 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500">
+                        {clientSearch ? 'No clients found matching your search' : 'No clients available'}
+                      </div>
+                    ) : (
+                      filteredClients.map(client => (
+                        <button
+                          key={client.id}
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, client_id: client.id }))
+                            setClientSearch('')
+                            setShowClientDropdown(false)
+                          }}
+                          className="w-full px-4 py-2 text-left hover:bg-indigo-50 transition-colors focus:bg-indigo-50 outline-none"
+                        >
+                          <div className="font-medium text-gray-900">{client.full_name}</div>
+                          <div className="text-sm text-gray-500">{client.email}</div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              {!showClientDropdown && formData.client_id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, client_id: '' }))
+                    setClientSearch('')
+                  }}
+                  className="absolute right-2 top-9 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {/* Policy Number */}
@@ -426,10 +491,10 @@ export default function AddPolicyPage() {
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={addPolicyMutation.loading}
               className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? (
+              {addPolicyMutation.loading ? (
                 <>
                   <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

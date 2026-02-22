@@ -1,30 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSupabaseQuery, useSupabaseMutation } from '@/hooks/useSupabaseQuery'
+import { debounce } from '@/utils/performance'
 
 export default function ClientsPage() {
   const router = useRouter()
-  const [clients, setClients] = useState([])
-  const [filtered, setFiltered] = useState([])
-  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [error, setError] = useState('')
-  const supabase = createClient()
 
-  useEffect(() => {
-    fetchClients()
-  }, [])
-
-  const fetchClients = async () => {
-    setLoading(true)
-    setError('')
-    try {
+  // Optimized data fetching with caching
+  const { data: clientsData, loading, error, refetch, supabase } = useSupabaseQuery(
+    'clients-list',
+    async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
-        return
+        return []
       }
 
       const { data, error } = await supabase
@@ -34,48 +26,45 @@ export default function ClientsPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setClients(data || [])
-      setFiltered(data || [])
-    } catch (err) {
-      console.error('Error fetching clients:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      return data || []
+    },
+    { staleTime: 60000 } // Cache for 1 minute
+  )
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    const query = search.trim().toLowerCase()
-    if (!query) {
-      setFiltered(clients)
-      return
-    }
+  const clients = clientsData || []
 
-    const results = clients.filter((client) =>
-      Object.values(client).some(
-        (val) => val && val.toString().toLowerCase().includes(query)
-      )
-    )
-    setFiltered(results)
-  }
-
-  const deleteClient = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this client?')) return
-
-    try {
+  // Optimized delete mutation
+  const { mutate: deleteClientMutation, loading: deleting } = useSupabaseMutation(
+    async (id, supabase) => {
       const { error } = await supabase
         .from('clients')
         .delete()
         .eq('id', id)
 
       if (error) throw error
-
-      fetchClients()
-    } catch (err) {
-      console.error('Error deleting client:', err)
-      setError(err.message)
+      return id
+    },
+    {
+      invalidateKeys: ['clients-list'],
+      onSuccess: () => refetch()
     }
+  )
+
+  // Memoized filtered results with debouncing
+  const filtered = useMemo(() => {
+    if (!search.trim()) return clients
+
+    const query = search.trim().toLowerCase()
+    return clients.filter((client) =>
+      Object.values(client).some(
+        (val) => val && val.toString().toLowerCase().includes(query)
+      )
+    )
+  }, [clients, search])
+
+  const deleteClient = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this client?')) return
+    await deleteClientMutation(id)
   }
 
   if (loading) {
@@ -110,7 +99,7 @@ export default function ClientsPage() {
 
       {/* Search Bar */}
       <div className="mb-6">
-        <form onSubmit={handleSearch} className="flex gap-2">
+        <div className="flex gap-2">
           <input
             type="text"
             value={search}
@@ -118,25 +107,16 @@ export default function ClientsPage() {
             placeholder="Search clients by name, email, phone..."
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
           />
-          <button
-            type="submit"
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors"
-          >
-            Search
-          </button>
           {search && (
             <button
               type="button"
-              onClick={() => {
-                setSearch('')
-                setFiltered(clients)
-              }}
+              onClick={() => setSearch('')}
               className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors"
             >
               Clear
             </button>
           )}
-        </form>
+        </div>
       </div>
 
       {error && (

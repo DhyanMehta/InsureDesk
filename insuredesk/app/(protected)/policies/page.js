@@ -1,66 +1,52 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
 
 export default function PoliciesPage() {
   const router = useRouter()
-  const supabase = createClient()
 
-  const [policies, setPolicies] = useState([])
-  const [filteredPolicies, setFilteredPolicies] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  // Unified search filter
+  const [searchQuery, setSearchQuery] = useState('')
 
-  // Column search filters
-  const [filters, setFilters] = useState({
-    clientName: '',
-    policyNumber: '',
-    insuranceCompany: '',
-    subCategory: '',
-    vehicleRegistration: '',
-    provider: '',
-    status: ''
-  })
-
-  useEffect(() => {
-    fetchPolicies()
-  }, [])
-
-  useEffect(() => {
-    applyFilters()
-  }, [filters, policies])
-
-  const fetchPolicies = async () => {
-    setLoading(true)
-    try {
+  // Optimized data fetching with caching
+  const { data: policiesData, loading, error, supabase } = useSupabaseQuery(
+    'policies-list',
+    async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
-        return
+        return []
       }
 
       const { data, error } = await supabase
         .from('policies')
         .select(`
-          *,
-          clients (
+          id,
+          policy_number,
+          start_date,
+          end_date,
+          status,
+          premium,
+          registration_no,
+          vehicle_name,
+          clients!inner (
             id,
             full_name,
             email,
             phone,
             address
           ),
-          insurance_companies (
+          insurance_companies!inner (
             id,
             name
           ),
-          providers (
+          providers!inner (
             id,
             name
           ),
-          policy_subcategories (
+          policy_subcategories!inner (
             id,
             name
           )
@@ -70,79 +56,34 @@ export default function PoliciesPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setPolicies(data || [])
-      setFilteredPolicies(data || [])
-    } catch (err) {
-      console.error('Error fetching policies:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      return data || []
+    },
+    { staleTime: 60000 } // Cache for 1 minute
+  )
 
-  const applyFilters = () => {
-    let filtered = [...policies]
+  const policies = policiesData || []
 
-    if (filters.clientName) {
-      filtered = filtered.filter(p =>
-        p.clients?.full_name?.toLowerCase().includes(filters.clientName.toLowerCase())
+  // Memoized filtered results with unified search across all fields
+  const filteredPolicies = useMemo(() => {
+    if (!searchQuery) return policies
+
+    const query = searchQuery.toLowerCase()
+    return policies.filter(policy => {
+      // Search across all relevant fields
+      return (
+        policy.clients?.full_name?.toLowerCase().includes(query) ||
+        policy.clients?.email?.toLowerCase().includes(query) ||
+        policy.clients?.phone?.toLowerCase().includes(query) ||
+        policy.policy_number?.toLowerCase().includes(query) ||
+        policy.insurance_companies?.name?.toLowerCase().includes(query) ||
+        policy.policy_subcategories?.name?.toLowerCase().includes(query) ||
+        policy.registration_no?.toLowerCase().includes(query) ||
+        policy.vehicle_name?.toLowerCase().includes(query) ||
+        policy.providers?.name?.toLowerCase().includes(query) ||
+        policy.status?.toLowerCase().includes(query)
       )
-    }
-
-    if (filters.policyNumber) {
-      filtered = filtered.filter(p =>
-        p.policy_number?.toLowerCase().includes(filters.policyNumber.toLowerCase())
-      )
-    }
-
-    if (filters.insuranceCompany) {
-      filtered = filtered.filter(p =>
-        p.insurance_companies?.name?.toLowerCase().includes(filters.insuranceCompany.toLowerCase())
-      )
-    }
-
-    if (filters.subCategory) {
-      filtered = filtered.filter(p =>
-        p.policy_subcategories?.name?.toLowerCase().includes(filters.subCategory.toLowerCase())
-      )
-    }
-
-    if (filters.vehicleRegistration) {
-      filtered = filtered.filter(p =>
-        p.registration_no?.toLowerCase().includes(filters.vehicleRegistration.toLowerCase())
-      )
-    }
-
-    if (filters.provider) {
-      filtered = filtered.filter(p =>
-        p.providers?.name?.toLowerCase().includes(filters.provider.toLowerCase())
-      )
-    }
-
-    if (filters.status) {
-      filtered = filtered.filter(p =>
-        p.status?.toLowerCase().includes(filters.status.toLowerCase())
-      )
-    }
-
-    setFilteredPolicies(filtered)
-  }
-
-  const handleFilterChange = (column, value) => {
-    setFilters(prev => ({ ...prev, [column]: value }))
-  }
-
-  const clearAllFilters = () => {
-    setFilters({
-      clientName: '',
-      policyNumber: '',
-      insuranceCompany: '',
-      subCategory: '',
-      vehicleRegistration: '',
-      provider: '',
-      status: ''
     })
-  }
+  }, [policies, searchQuery])
 
   const exportToExcel = () => {
     try {
@@ -253,20 +194,38 @@ export default function PoliciesPage() {
         </div>
       )}
 
-      {/* Filter Actions */}
-      {Object.values(filters).some(f => f !== '') && (
-        <div className="mb-4 flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-          <p className="text-sm text-indigo-900">
-            <span className="font-medium">{filteredPolicies.length}</span> policies match your filters
-          </p>
-          <button
-            onClick={clearAllFilters}
-            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium transition-colors"
-          >
-            Clear All Filters
-          </button>
+      {/* Unified Search Bar */}
+      <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search policies by client name, policy number, insurance company, vehicle registration, status..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </div>
-      )}
+        {searchQuery && (
+          <p className="mt-2 text-sm text-indigo-600">
+            <span className="font-medium">{filteredPolicies.length}</span> policies match your search
+          </p>
+        )}
+      </div>
 
       {/* Policies Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -307,78 +266,6 @@ export default function PoliciesPage() {
                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
                   Premium
                 </th>
-              </tr>
-            </thead>
-            {/* Filter Row */}
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.clientName}
-                    onChange={(e) => handleFilterChange('clientName', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.policyNumber}
-                    onChange={(e) => handleFilterChange('policyNumber', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.insuranceCompany}
-                    onChange={(e) => handleFilterChange('insuranceCompany', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.subCategory}
-                    onChange={(e) => handleFilterChange('subCategory', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.vehicleRegistration}
-                    onChange={(e) => handleFilterChange('vehicleRegistration', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2"></th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.provider}
-                    onChange={(e) => handleFilterChange('provider', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2"></th>
-                <th className="px-4 py-2"></th>
-                <th className="px-4 py-2">
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    value={filters.status}
-                    onChange={(e) => handleFilterChange('status', e.target.value)}
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                  />
-                </th>
-                <th className="px-4 py-2"></th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">

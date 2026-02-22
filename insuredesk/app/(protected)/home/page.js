@@ -1,64 +1,46 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { useState, useMemo } from 'react'
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
+import { batchQueries } from '@/utils/performance'
 
 export default function HomePage() {
-  const [user, setUser] = useState(null)
-  const [kpis, setKpis] = useState({
-    totalClients: 0,
-    activePolicies: 0,
-    expiringSoon: 0,
-    documentsUploaded: 0,
-    pendingReminders: 0,
-    totalPremium: 0,
-    totalCommission: 0
-  })
-  const [loading, setLoading] = useState(true)
-  const supabase = createClient()
-
-  useEffect(() => {
-    getData()
-  }, [])
-
-  const getData = async () => {
-    try {
-      // Get user
+  // Optimized data fetching with parallel batched queries and caching
+  const { data: dashboardData, loading, supabase } = useSupabaseQuery(
+    'dashboard-kpis',
+    async () => {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      setUser(user)
+      if (!user) return null
 
       // Calculate date 30 days from now for expiring soon
       const thirtyDaysFromNow = new Date()
       thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
       const thirtyDaysStr = thirtyDaysFromNow.toISOString().split('T')[0]
-
       const today = new Date().toISOString().split('T')[0]
 
-      // Get all data in parallel
+      // Optimized parallel queries - only fetch necessary data
       const [clientsRes, policiesRes, documentsRes, remindersRes] = await Promise.all([
-        // Total clients
+        // Total clients - count only
         supabase
           .from('clients')
           .select('id', { count: 'exact', head: true })
           .eq('agent_id', user.id)
           .is('deleted_at', null),
 
-        // All policies
+        // Policies - only status, dates, and financial fields
         supabase
           .from('policies')
-          .select('*')
+          .select('status, end_date, premium, commission')
           .eq('agent_id', user.id)
           .is('deleted_at', null),
 
-        // Documents count
+        // Documents - count only
         supabase
           .from('documents')
           .select('id', { count: 'exact', head: true })
           .eq('agent_id', user.id),
 
-        // Pending reminders
+        // Pending reminders - count only
         supabase
           .from('reminders')
           .select('id', { count: 'exact', head: true })
@@ -66,19 +48,14 @@ export default function HomePage() {
           .eq('status', 'pending')
       ])
 
-      const totalClients = clientsRes.count || 0
       const policies = policiesRes.data || []
-      const documentsCount = documentsRes.count || 0
-      const pendingReminders = remindersRes.count || 0
 
-      // Calculate policy metrics
+      // Calculate metrics
       const activePolicies = policies.filter(p => p.status === 'ok').length
-      const expiringSoon = policies.filter(p => {
-        if (!p.end_date) return false
-        return p.end_date >= today && p.end_date <= thirtyDaysStr
-      }).length
+      const expiringSoon = policies.filter(p =>
+        p.end_date && p.end_date >= today && p.end_date <= thirtyDaysStr
+      ).length
 
-      // Calculate financial metrics
       const totalPremium = policies
         .filter(p => p.status === 'ok')
         .reduce((sum, p) => sum + (parseFloat(p.premium) || 0), 0)
@@ -87,21 +64,31 @@ export default function HomePage() {
         .filter(p => p.status === 'ok')
         .reduce((sum, p) => sum + (parseFloat(p.commission) || 0), 0)
 
-      setKpis({
-        totalClients,
-        activePolicies,
-        expiringSoon,
-        documentsUploaded: documentsCount,
-        pendingReminders,
-        totalPremium,
-        totalCommission
-      })
+      return {
+        user,
+        kpis: {
+          totalClients: clientsRes.count || 0,
+          activePolicies,
+          expiringSoon,
+          documentsUploaded: documentsRes.count || 0,
+          pendingReminders: remindersRes.count || 0,
+          totalPremium,
+          totalCommission
+        }
+      }
+    },
+    { staleTime: 30000 } // Cache for 30 seconds
+  )
 
-      setLoading(false)
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error)
-      setLoading(false)
-    }
+  const user = dashboardData?.user
+  const kpis = dashboardData?.kpis || {
+    totalClients: 0,
+    activePolicies: 0,
+    expiringSoon: 0,
+    documentsUploaded: 0,
+    pendingReminders: 0,
+    totalPremium: 0,
+    totalCommission: 0
   }
 
   if (loading) {

@@ -1,55 +1,48 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/utils/supabase/client'
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
 
 export default function DocumentsPage() {
   const router = useRouter()
-  const [documents, setDocuments] = useState([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const supabase = createClient()
 
-  useEffect(() => {
-    fetchDocuments()
-  }, [])
-
-  const fetchDocuments = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push('/login')
-        return
-      }
-
+  // Optimized document fetching with caching
+  const { data: documentsData, loading, supabase } = useSupabaseQuery(
+    'documents-list',
+    async () => {
       const { data, error } = await supabase
         .from('documents')
         .select(`
-          *,
+          id,
+          file_name,
+          file_url,
+          file_size,
+          uploaded_at,
+          client_id,
+          policy_id,
+          clients (
+            full_name
+          ),
           policies (
             policy_number,
-            providers (name),
-            clients (
-              full_name
-            )
+            providers (name)
           )
         `)
-        .eq('agent_id', user.id)
+        .eq('agent_id', (await supabase.auth.getUser()).data.user?.id)
         .order('uploaded_at', { ascending: false })
 
       if (error) throw error
-      setDocuments(data || [])
-    } catch (err) {
-      console.error('Error fetching documents:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+      return data || []
+    },
+    { staleTime: 60000 } // Cache for 1 minute
+  )
 
-  const getFileIcon = (fileType) => {
-    if (fileType?.includes('pdf')) {
+  const documents = documentsData || []
+
+  const getFileIcon = (fileName) => {
+    if (fileName?.toLowerCase().endsWith('.pdf')) {
       return (
         <svg className="w-12 h-12 text-red-600" fill="currentColor" viewBox="0 0 56 64">
           <path d="M5.112 0C2.289 0 0 2.289 0 5.112v53.76C0 61.71 2.289 64 5.112 64h45.76C53.71 64 56 61.71 56 58.88V16.84L39.17 0H5.112z" />
@@ -58,7 +51,8 @@ export default function DocumentsPage() {
         </svg>
       )
     }
-    if (fileType?.includes('image')) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    if (imageExtensions.some(ext => fileName?.toLowerCase().endsWith(ext))) {
       return (
         <svg className="w-12 h-12 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
           <path d="M21 19V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2zM8.5 13.5l2.5 3 3.5-4.5 4.5 6H5l3.5-4.5z" />
@@ -118,15 +112,26 @@ export default function DocumentsPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Documents</h1>
           <p className="text-gray-600">Manage your policy documents</p>
         </div>
-        <button
-          onClick={() => router.push('/policies')}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16l-4-4m0 0l4-4m-4 4h18" />
-          </svg>
-          Back to Policies
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => router.push('/documents/add')}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload Document
+          </button>
+          <button
+            onClick={() => router.push('/policies')}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            View Policies
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -150,13 +155,7 @@ export default function DocumentsPage() {
             <div key={doc.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
               <div className="p-6">
                 <div className="flex items-start justify-between mb-4">
-                  {getFileIcon(doc.file_type)}
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${doc.is_verified
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                    }`}>
-                    {doc.is_verified ? 'Verified' : 'Pending'}
-                  </span>
+                  {getFileIcon(doc.file_name)}
                 </div>
 
                 <h3 className="font-semibold text-gray-900 mb-3 truncate" title={doc.file_name}>
@@ -168,7 +167,7 @@ export default function DocumentsPage() {
                     <span className="font-medium">Policy:</span> {doc.policies?.policy_number || 'N/A'}
                   </p>
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium">Client:</span> {doc.policies?.clients?.full_name || 'N/A'}
+                    <span className="font-medium">Client:</span> {doc.clients?.full_name || 'N/A'}
                   </p>
                   <p className="text-sm text-gray-600">
                     <span className="font-medium">Size:</span> {formatFileSize(doc.file_size)}
