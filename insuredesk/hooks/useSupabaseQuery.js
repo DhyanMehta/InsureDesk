@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { cachedQuery, invalidateCache, debounce } from '@/utils/performance'
+import cache from '@/utils/redisCache'
 
 /**
- * Custom hook for cached Supabase queries with automatic optimization
+ * Custom hook for cached Supabase queries with Redis caching and automatic optimization
  */
 export function useSupabaseQuery(key, queryFn, options = {}) {
     const [data, setData] = useState(null)
@@ -16,6 +17,8 @@ export function useSupabaseQuery(key, queryFn, options = {}) {
         refetchOnMount = false,
         cacheTime = 5 * 60 * 1000, // 5 minutes
         staleTime = 30000, // 30 seconds
+        useRedis = true, // Use Redis caching by default
+        redisTTL = cache.TTL.LISTS, // Default Redis TTL
     } = options
 
     const fetchData = useCallback(async (forceRefresh = false) => {
@@ -25,11 +28,36 @@ export function useSupabaseQuery(key, queryFn, options = {}) {
             setLoading(true)
             setError(null)
 
+            // Try Redis cache first for instant load
+            if (useRedis && !forceRefresh) {
+                try {
+                    const cached = await cache.get(key)
+                    if (cached) {
+                        const cachedData = typeof cached === 'string' ? JSON.parse(cached) : cached
+                        setData(cachedData)
+                        setLoading(false)
+                        // Continue to fetch fresh data in background
+                    }
+                } catch (cacheErr) {
+                    console.error('Redis read error:', cacheErr)
+                }
+            }
+
+            // Fetch from Supabase with memory cache
             const result = await cachedQuery(
                 key,
                 queryFn,
                 { cacheTime, staleTime, forceRefresh }
             )
+
+            // Update Redis cache
+            if (useRedis && result) {
+                try {
+                    await cache.set(key, result, redisTTL)
+                } catch (cacheErr) {
+                    console.error('Redis write error:', cacheErr)
+                }
+            }
 
             setData(result)
         } catch (err) {
@@ -38,13 +66,13 @@ export function useSupabaseQuery(key, queryFn, options = {}) {
         } finally {
             setLoading(false)
         }
-    }, [key, enabled, cacheTime, staleTime])
+    }, [key, enabled, cacheTime, staleTime, useRedis, redisTTL])
 
     useEffect(() => {
         if (enabled) {
             fetchData(refetchOnMount)
         }
-    }, [enabled, refetchOnMount])
+    }, [enabled, refetchOnMount, fetchData])
 
     const refetch = useCallback(() => {
         return fetchData(true)
@@ -128,7 +156,7 @@ export function useSearchQuery(key, queryFn, searchTerm, options = {}) {
 }
 
 /**
- * Hook for mutations with automatic cache invalidation
+ * Hook for mutations with automatic cache invalidation (memory + Redis)
  */
 export function useSupabaseMutation(mutationFn, options = {}) {
     const [loading, setLoading] = useState(false)
@@ -142,9 +170,20 @@ export function useSupabaseMutation(mutationFn, options = {}) {
 
             const result = await mutationFn(variables, supabase)
 
-            // Invalidate related caches
+            // Invalidate related caches (both memory and Redis)
             if (options.invalidateKeys) {
-                options.invalidateKeys.forEach(k => invalidateCache(k))
+                for (const k of options.invalidateKeys) {
+                    invalidateCache(k)
+                    try {
+                        if (k.includes('*')) {
+                            await cache.deletePattern(k)
+                        } else {
+                            await cache.delete(k)
+                        }
+                    } catch (cacheErr) {
+                        console.error('Redis invalidation error:', cacheErr)
+                    }
+                }
             }
 
             // Call success callback

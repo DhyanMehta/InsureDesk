@@ -4,12 +4,14 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseQuery, useSupabaseMutation } from '@/hooks/useSupabaseQuery'
 import { debounce } from '@/utils/performance'
+import { TableSkeleton, LoadingButton } from '@/components/SkeletonLoader'
 
 export default function ClientsPage() {
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [isNavigating, setIsNavigating] = useState(false)
 
-  // Optimized data fetching with caching
+  // Optimized data fetching with Redis caching
   const { data: clientsData, loading, error, refetch, supabase } = useSupabaseQuery(
     'clients-list',
     async () => {
@@ -24,11 +26,16 @@ export default function ClientsPage() {
         .select('*')
         .eq('agent_id', user.id)
         .order('created_at', { ascending: false })
+        .limit(100) // Limit initial load for performance
 
       if (error) throw error
       return data || []
     },
-    { staleTime: 60000 } // Cache for 1 minute
+    {
+      staleTime: 60000, // Cache for 1 minute
+      useRedis: true,
+      redisTTL: 60 // Redis cache for 60 seconds
+    }
   )
 
   const clients = clientsData || []
@@ -67,13 +74,22 @@ export default function ClientsPage() {
     await deleteClientMutation(id)
   }
 
+  const handleAddClient = () => {
+    setIsNavigating(true)
+    router.push('/clients/add')
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading clients...</p>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <div className="h-8 bg-gray-300 rounded w-32 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-48 animate-pulse"></div>
+          </div>
+          <div className="h-10 bg-gray-300 rounded w-32 animate-pulse"></div>
         </div>
+        <TableSkeleton rows={10} columns={6} />
       </div>
     )
   }
@@ -86,15 +102,16 @@ export default function ClientsPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Clients</h1>
           <p className="text-gray-600">Manage your insurance clients</p>
         </div>
-        <button
-          onClick={() => router.push('/clients/add')}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2"
+        <LoadingButton
+          onClick={handleAddClient}
+          loading={isNavigating}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2 disabled:opacity-75"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           Add Client
-        </button>
+        </LoadingButton>
       </div>
 
       {/* Search Bar */}

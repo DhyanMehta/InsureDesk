@@ -3,14 +3,16 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
+import { TableSkeleton, LoadingButton } from '@/components/SkeletonLoader'
 
 export default function PoliciesPage() {
   const router = useRouter()
+  const [isNavigating, setIsNavigating] = useState(false)
 
   // Unified search filter
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Optimized data fetching with caching
+  // Optimized data fetching with caching + Redis
   const { data: policiesData, loading, error, supabase } = useSupabaseQuery(
     'policies-list',
     async () => {
@@ -54,11 +56,16 @@ export default function PoliciesPage() {
         .eq('agent_id', user.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false })
+        .limit(100) // Limit initial load for performance
 
       if (error) throw error
       return data || []
     },
-    { staleTime: 60000 } // Cache for 1 minute
+    {
+      staleTime: 60000, // Cache for 1 minute
+      useRedis: true,
+      redisTTL: 60 // Redis cache for 60 seconds
+    }
   )
 
   const policies = policiesData || []
@@ -146,13 +153,25 @@ export default function PoliciesPage() {
     return colors[status] || 'bg-gray-100 text-gray-800'
   }
 
+  const handleAddPolicy = () => {
+    setIsNavigating(true)
+    router.push('/policies/add')
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading policies...</p>
+      <div className="p-6 max-w-full mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <div className="h-8 bg-gray-300 rounded w-32 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-48 animate-pulse"></div>
+          </div>
+          <div className="flex gap-3">
+            <div className="h-10 bg-gray-300 rounded w-36 animate-pulse"></div>
+            <div className="h-10 bg-gray-300 rounded w-32 animate-pulse"></div>
+          </div>
         </div>
+        <TableSkeleton rows={10} columns={8} />
       </div>
     )
   }
@@ -176,15 +195,16 @@ export default function PoliciesPage() {
             </svg>
             Export to Excel
           </button>
-          <button
-            onClick={() => router.push('/policies/add')}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2"
+          <LoadingButton
+            onClick={handleAddPolicy}
+            loading={isNavigating}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2 disabled:opacity-75"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Policy
-          </button>
+          </LoadingButton>
         </div>
       </div>
 

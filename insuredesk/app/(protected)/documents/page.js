@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery'
+import { TableSkeleton, LoadingButton } from '@/components/SkeletonLoader'
 
 export default function DocumentsPage() {
   const router = useRouter()
   const [error, setError] = useState('')
+  const [isNavigating, setIsNavigating] = useState(false)
 
-  // Optimized document fetching with caching
+  // Optimized document fetching with Redis caching
   const { data: documentsData, loading, supabase } = useSupabaseQuery(
     'documents-list',
     async () => {
@@ -32,11 +34,16 @@ export default function DocumentsPage() {
         `)
         .eq('agent_id', (await supabase.auth.getUser()).data.user?.id)
         .order('uploaded_at', { ascending: false })
+        .limit(100) // Limit for performance
 
       if (error) throw error
       return data || []
     },
-    { staleTime: 60000 } // Cache for 1 minute
+    {
+      staleTime: 60000, // Cache for 1 minute
+      useRedis: true,
+      redisTTL: 120 // Redis cache for 2 minutes
+    }
   )
 
   const documents = documentsData || []
@@ -67,9 +74,39 @@ export default function DocumentsPage() {
     )
   }
 
+  const fixBucketUrl = (url) => {
+    if (!url) return url
+
+    // Log original URL for debugging
+    console.log('Original URL:', url)
+
+    // Fix URLs that point to old 'documents' bucket
+    let fixedUrl = url
+    if (url.includes('/storage/v1/object/public/documents/')) {
+      fixedUrl = url.replace('/storage/v1/object/public/documents/', '/storage/v1/object/public/policy-documents/')
+      console.log('Fixed URL:', fixedUrl)
+    }
+
+    return fixedUrl
+  }
+
   const downloadDocument = async (fileUrl, fileName) => {
     try {
-      const response = await fetch(fileUrl)
+      // Fix bucket name if needed
+      const correctedUrl = fixBucketUrl(fileUrl)
+
+      console.log('Attempting download from:', correctedUrl)
+
+      const response = await fetch(correctedUrl)
+      console.log('Response status:', response.status, response.statusText)
+
+      if (!response.ok) {
+        // Get more error details
+        const errorText = await response.text()
+        console.error('Download error details:', errorText)
+        throw new Error(`Download failed: ${response.status} ${response.statusText}`)
+      }
+
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -79,9 +116,11 @@ export default function DocumentsPage() {
       link.click()
       document.body.removeChild(link)
       window.URL.revokeObjectURL(url)
+
+      setError('') // Clear any previous errors
     } catch (err) {
       console.error('Error downloading document:', err)
-      setError('Failed to download document')
+      setError(`Failed to download document: ${err.message}`)
     }
   }
 
@@ -93,13 +132,30 @@ export default function DocumentsPage() {
     return `${kb.toFixed(2)} KB`
   }
 
+  const handleUpload = () => {
+    setIsNavigating(true)
+    router.push('/documents/add')
+  }
+
+  const handleViewPolicies = () => {
+    setIsNavigating(true)
+    router.push('/policies')
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading documents...</p>
+      <div className="p-6 max-w-7xl mx-auto">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <div className="h-8 bg-gray-300 rounded w-40 mb-2 animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-56 animate-pulse"></div>
+          </div>
+          <div className="flex gap-3">
+            <div className="h-10 bg-gray-300 rounded w-40 animate-pulse"></div>
+            <div className="h-10 bg-gray-300 rounded w-36 animate-pulse"></div>
+          </div>
         </div>
+        <TableSkeleton rows={8} columns={5} />
       </div>
     )
   }
@@ -113,24 +169,26 @@ export default function DocumentsPage() {
           <p className="text-gray-600">Manage your policy documents</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => router.push('/documents/add')}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2"
+          <LoadingButton
+            onClick={handleUpload}
+            loading={isNavigating}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center gap-2 disabled:opacity-75"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
             Upload Document
-          </button>
-          <button
-            onClick={() => router.push('/policies')}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors flex items-center gap-2"
+          </LoadingButton>
+          <LoadingButton
+            onClick={handleViewPolicies}
+            loading={isNavigating}
+            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors flex items-center gap-2 disabled:opacity-75"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
             View Policies
-          </button>
+          </LoadingButton>
         </div>
       </div>
 
@@ -180,7 +238,7 @@ export default function DocumentsPage() {
                 {doc.file_url && (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => window.open(doc.file_url, '_blank')}
+                      onClick={() => window.open(fixBucketUrl(doc.file_url), '_blank')}
                       className="flex-1 px-3 py-2 bg-indigo-600 text-white text-sm text-center rounded-lg hover:bg-indigo-700 font-medium transition-colors flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
