@@ -10,7 +10,7 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -23,7 +23,7 @@ function LoginForm() {
   useEffect(() => {
     const errorParam = searchParams.get('error')
     const successParam = searchParams.get('success')
-    
+
     if (errorParam === 'confirmation_failed') {
       setError('Email confirmation failed. Please try signing up again.')
     } else if (successParam === 'confirmed') {

@@ -1,18 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  
+
   // Production optimizations
   swcMinify: true,
   compress: true,
-  
+
   // Image optimization
   images: {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
-  
+
   // Security headers
   async headers() {
     return [
@@ -58,17 +58,17 @@ const nextConfig = {
       }
     ];
   },
-  
+
   // Environment variables validation
   env: {
     BUILD_TIME: new Date().toISOString(),
   },
-  
+
   // Production only configurations
   ...(process.env.NODE_ENV === 'production' && {
     // Disable source maps in production for security
     productionBrowserSourceMaps: false,
-    
+
     // Enable React production mode
     compiler: {
       removeConsole: {
