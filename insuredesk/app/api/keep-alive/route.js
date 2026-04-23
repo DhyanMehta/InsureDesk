@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 export async function GET(request) {
     try {
@@ -16,19 +15,25 @@ export async function GET(request) {
             return NextResponse.json({ error: 'Missing environment variables' }, { status: 500 });
         }
 
-        const supabase = createClient(supabaseUrl, serviceRoleKey);
+        // ✅ Direct REST ping — no table, no RPC, always works
+        const response = await fetch(`${supabaseUrl}/rest/v1/`, {
+            headers: {
+                apikey: serviceRoleKey,
+                Authorization: `Bearer ${serviceRoleKey}`,
+            },
+        });
 
-        const { error } = await supabase.rpc('version');
-
-        if (error) {
-            console.error('[keep-alive] supabase error:', error.message);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        if (!response.ok) {
+            const text = await response.text();
+            console.error('[keep-alive] supabase ping failed:', text);
+            return NextResponse.json({ error: 'Supabase ping failed' }, { status: 500 });
         }
 
         const timestamp = new Date().toISOString();
         console.log('[keep-alive] success', { timestamp });
 
         return NextResponse.json({ success: true, timestamp }, { status: 200 });
+
     } catch (error) {
         const message = error?.message || 'Unexpected error';
         console.error('[keep-alive] failure:', message);
