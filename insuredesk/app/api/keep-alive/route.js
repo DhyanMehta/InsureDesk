@@ -4,9 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 export async function GET(request) {
     try {
         const authHeader = request.headers.get('authorization');
-        const cronSecret = process.env.CRON_SECRET;
 
-        if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
@@ -14,25 +13,25 @@ export async function GET(request) {
         const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
         if (!supabaseUrl || !serviceRoleKey) {
-            throw new Error('Missing Supabase environment configuration');
+            return NextResponse.json({ error: 'Missing environment variables' }, { status: 500 });
         }
 
         const supabase = createClient(supabaseUrl, serviceRoleKey);
-        const tableName = 'profiles';
 
-        const { error } = await supabase.from(tableName).select('id').limit(1);
+        const { error } = await supabase.rpc('version');
 
         if (error) {
-            throw error;
+            console.error('[keep-alive] supabase error:', error.message);
+            return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
         const timestamp = new Date().toISOString();
-        console.log('[keep-alive] success', { tableName, timestamp });
+        console.log('[keep-alive] success', { timestamp });
 
-        return NextResponse.json({ success: true, timestamp });
+        return NextResponse.json({ success: true, timestamp }, { status: 200 });
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        console.log('[keep-alive] failure', { message });
+        const message = error?.message || 'Unexpected error';
+        console.error('[keep-alive] failure:', message);
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }
