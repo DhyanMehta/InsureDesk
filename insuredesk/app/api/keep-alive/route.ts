@@ -26,10 +26,18 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    console.log('[keep-alive] pinging Supabase table', { table: 'clients' })
+
     const { error } = await supabase.from('clients').select('*').limit(1)
 
     if (error) {
-      throw error
+      console.error('[keep-alive] supabase query failed', error)
+      throw new Error(
+        error.message ||
+          error.details ||
+          error.hint ||
+          'Supabase query failed'
+      )
     }
 
     const timestamp = new Date().toISOString()
@@ -37,7 +45,14 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ ok: true, timestamp })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unexpected error'
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : error && typeof error === 'object'
+            ? JSON.stringify(error)
+            : 'Unexpected error'
     console.error('[keep-alive] failure', { error: message })
 
     return NextResponse.json({ ok: false, error: message }, { status: 500 })
