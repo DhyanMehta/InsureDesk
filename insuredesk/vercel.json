@@ -10,6 +10,10 @@
         "app/api/**/*.js": {
             "memory": 1024,
             "maxDuration": 10
+        },
+        "app/api/**/*.ts": {
+            "memory": 1024,
+            "maxDuration": 10
         }
     },
     "headers": [
@@ -25,12 +29,8 @@
     ],
     "crons": [
         {
-            "path": "/api/cron/keep-alive",
-            "schedule": "0 2 * * 0"
-        },
-        {
-            "path": "/api/keep-alive",
-            "schedule": "0 0 */4 * *"
+            "path": "/api/keep-alive?secret=YOUR_CRON_SECRET_VALUE",
+            "schedule": "0 0 */3 * *"
         }
     ]
 }
