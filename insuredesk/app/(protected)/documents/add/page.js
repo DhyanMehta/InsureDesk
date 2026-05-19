@@ -24,7 +24,7 @@ export default function AddDocumentPage() {
   const [uploadProgress, setUploadProgress] = useState(0)
 
   // Fetch clients and policies
-  const { data: formOptions, loading: optionsLoading } = useSupabaseQuery(
+  const { data: formOptions, loading: optionsLoading, error: optionsError } = useSupabaseQuery(
     'document-form-options',
     async () => {
       const { data: { user } } = await supabase.auth.getUser()
@@ -41,6 +41,7 @@ export default function AddDocumentPage() {
           .from('policies')
           .select(`
             id, 
+            client_id,
             policy_number,
             clients!inner (
               full_name
@@ -82,7 +83,7 @@ export default function AddDocumentPage() {
   // Filtered policies based on search (filter by client if selected)
   const filteredPolicies = useMemo(() => {
     let filtered = formData.client_id
-      ? policies.filter(p => p.clients?.full_name === selectedClient?.full_name)
+      ? policies.filter(p => p.client_id === formData.client_id)
       : policies
 
     if (policySearch) {
@@ -94,7 +95,7 @@ export default function AddDocumentPage() {
     }
 
     return filtered
-  }, [policies, policySearch, formData.client_id, selectedClient])
+  }, [policies, policySearch, formData.client_id])
 
   // Mutation for uploading document
   const uploadDocumentMutation = useSupabaseMutation(
@@ -219,6 +220,12 @@ export default function AddDocumentPage() {
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
             {error}
+          </div>
+        )}
+
+        {optionsError && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800">
+            Unable to load clients or policies. Please refresh the page and try again.
           </div>
         )}
 
